@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "17644986950",
+    "project_id": "grindflow38",
+    "storage_bucket": "grindflow38.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:17644986950:android:4643dd0557e9fdc82da047",
+        "android_client_info": {
+          "package_name": "com.example.grindflow"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "17644986950-q06b0cmq859qkc4do6u56ncr6c3u2jo2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.grindflow",
+            "certificate_hash": "e3bf9b1ac4d35981f9617f5807829ff57d365c8e"
+          }
+        },
+        {
+          "client_id": "17644986950-5222fjt6oer5nq9kkh551sjoqhvol9fe.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAeIudpOnWlzXwVQGaoIlf3SdFgxMQvclw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "17644986950-5222fjt6oer5nq9kkh551sjoqhvol9fe.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
