@@ -31,25 +31,27 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import com.example.grindflow.data.GrindFlowDatabase
+import com.example.grindflow.data.TaskEntity
+import kotlinx.coroutines.launch
 
-
-// ============================================================
-// TASK DATA
-// ============================================================
 
 data class TaskItem(
+    val id: Int = 0,
     val title: String,
     val description: String,
     val dueDate: String,
@@ -60,75 +62,53 @@ data class TaskItem(
 )
 
 
-// ============================================================
-// MAIN TASKS SCREEN
-// ============================================================
-
 @Composable
 fun TasksScreen(
     onBackToHome: () -> Unit
 ) {
 
+    val context = LocalContext.current
+
+    val database = remember {
+        GrindFlowDatabase.getDatabase(context)
+    }
+
+    val taskDao = database.taskDao()
+
+    val tasksFromDatabase by taskDao
+        .getAllTasks()
+        .collectAsState(initial = emptyList())
+
+    val scope = rememberCoroutineScope()
+
     var showAddTask by remember {
         mutableStateOf(false)
     }
 
-    var editingIndex by remember {
-        mutableIntStateOf(-1)
+    var editingTask by remember {
+        mutableStateOf<TaskItem?>(null)
     }
 
+    val tasks = tasksFromDatabase.map { task ->
 
-    // ========================================================
-    // SAMPLE TASKS
-    // ========================================================
-
-    val tasks = remember {
-
-        mutableStateListOf(
-
-            TaskItem(
-                title = "Finish GrindFlow UI",
-                description = "Complete the remaining screens for the Android application.",
-                dueDate = "17 September 2026",
-                dueTime = "14:00",
-                category = "College",
-                priority = "High",
-                completed = false
-            ),
-
-            TaskItem(
-                title = "Study Software Testing",
-                description = "Review component testing and test automation.",
-                dueDate = "17 September 2026",
-                dueTime = "18:00",
-                category = "Study",
-                priority = "Medium",
-                completed = false
-            ),
-
-            TaskItem(
-                title = "Complete Workout",
-                description = "Complete today's home workout.",
-                dueDate = "17 September 2026",
-                dueTime = "19:30",
-                category = "Personal",
-                priority = "Low",
-                completed = true
-            )
+        TaskItem(
+            id = task.id,
+            title = task.title,
+            description = task.description,
+            dueDate = task.date,
+            dueTime = task.time,
+            category = task.category,
+            priority = task.priority,
+            completed = task.completed
         )
     }
-
-
-    // ========================================================
-    // ANDROID BACK BUTTON
-    // ========================================================
 
     BackHandler {
 
         if (showAddTask) {
 
             showAddTask = false
-            editingIndex = -1
+            editingTask = null
 
         } else {
 
@@ -136,83 +116,106 @@ fun TasksScreen(
         }
     }
 
-
-    // ========================================================
-    // ADD / EDIT TASK SCREEN
-    // ========================================================
-
     if (showAddTask) {
 
-        val taskToEdit =
-            if (editingIndex >= 0 && editingIndex < tasks.size) {
-                tasks[editingIndex]
-            } else {
-                null
-            }
-
         AddTaskScreen(
-
-            existingTask = taskToEdit,
+            existingTask = editingTask,
 
             onBack = {
-
                 showAddTask = false
-                editingIndex = -1
+                editingTask = null
             },
 
             onSave = { updatedTask ->
 
-                if (editingIndex >= 0 && editingIndex < tasks.size) {
+                scope.launch {
 
-                    tasks[editingIndex] = updatedTask
+                    if (updatedTask.id == 0) {
 
-                } else {
+                        taskDao.insertTask(
+                            TaskEntity(
+                                title = updatedTask.title,
+                                description = updatedTask.description,
+                                date = updatedTask.dueDate,
+                                time = updatedTask.dueTime,
+                                category = updatedTask.category,
+                                priority = updatedTask.priority,
+                                completed = updatedTask.completed
+                            )
+                        )
 
-                    tasks.add(updatedTask)
+                    } else {
+
+                        taskDao.updateTask(
+                            TaskEntity(
+                                id = updatedTask.id,
+                                title = updatedTask.title,
+                                description = updatedTask.description,
+                                date = updatedTask.dueDate,
+                                time = updatedTask.dueTime,
+                                category = updatedTask.category,
+                                priority = updatedTask.priority,
+                                completed = updatedTask.completed
+                            )
+                        )
+                    }
                 }
 
                 showAddTask = false
-                editingIndex = -1
+                editingTask = null
             }
         )
 
     } else {
-
-        // ====================================================
-        // TASK LIST
-        // ====================================================
 
         TaskListScreen(
 
             tasks = tasks,
 
             onAddTask = {
-
-                editingIndex = -1
+                editingTask = null
                 showAddTask = true
             },
 
-            onEditTask = { index ->
-
-                editingIndex = index
+            onEditTask = { task ->
+                editingTask = task
                 showAddTask = true
             },
 
-            onDeleteTask = { index ->
+            onDeleteTask = { task ->
 
-                if (index >= 0 && index < tasks.size) {
-                    tasks.removeAt(index)
+                scope.launch {
+
+                    taskDao.deleteTask(
+                        TaskEntity(
+                            id = task.id,
+                            title = task.title,
+                            description = task.description,
+                            date = task.dueDate,
+                            time = task.dueTime,
+                            category = task.category,
+                            priority = task.priority,
+                            completed = task.completed
+                        )
+                    )
                 }
             },
 
-            onToggleComplete = { index ->
+            onToggleComplete = { task ->
 
-                if (index >= 0 && index < tasks.size) {
+                scope.launch {
 
-                    val task = tasks[index]
-
-                    tasks[index] = task.copy(
-                        completed = !task.completed
+                    taskDao.updateTask(
+                        TaskEntity(
+                            id = task.id,
+                            title = task.title,
+                            description = task.description,
+                            date = task.dueDate,
+                            time = task.dueTime,
+                            category = task.category,
+                            priority = task.priority,
+                            completed = !task.completed
+                        )
                     )
                 }
             },
@@ -225,17 +228,13 @@ fun TasksScreen(
 }
 
 
-// ============================================================
-// TASK LIST SCREEN
-// ============================================================
-
 @Composable
 fun TaskListScreen(
     tasks: List<TaskItem>,
     onAddTask: () -> Unit,
-    onEditTask: (Int) -> Unit,
-    onDeleteTask: (Int) -> Unit,
-    onToggleComplete: (Int) -> Unit,
+    onEditTask: (TaskItem) -> Unit,
+    onDeleteTask: (TaskItem) -> Unit,
+    onToggleComplete: (TaskItem) -> Unit,
     onBackToHome: () -> Unit
 ) {
 
@@ -252,10 +251,6 @@ fun TaskListScreen(
             .fillMaxSize()
             .background(backgroundColor)
     ) {
-
-        // ====================================================
-        // HEADER
-        // ====================================================
 
         Row(
             modifier = Modifier
@@ -305,11 +300,6 @@ fun TaskListScreen(
             }
         }
 
-
-        // ====================================================
-        // TASK SUMMARY
-        // ====================================================
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -319,7 +309,6 @@ fun TaskListScreen(
                 ),
 
             horizontalArrangement = Arrangement.SpaceBetween,
-
             verticalAlignment = Alignment.CenterVertically
         ) {
 
@@ -338,11 +327,6 @@ fun TaskListScreen(
             )
         }
 
-
-        // ====================================================
-        // TASK LIST
-        // ====================================================
-
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -350,7 +334,12 @@ fun TaskListScreen(
                 .padding(horizontal = 20.dp)
         ) {
 
-            itemsIndexed(tasks) { index, task ->
+            itemsIndexed(
+                items = tasks,
+                key = { _, task ->
+                    task.id
+                }
+            ) { _, task ->
 
                 TaskItemCard(
 
@@ -359,15 +348,15 @@ fun TaskListScreen(
                     purple = purple,
 
                     onToggleComplete = {
-                        onToggleComplete(index)
+                        onToggleComplete(task)
                     },
 
                     onEdit = {
-                        onEditTask(index)
+                        onEditTask(task)
                     },
 
                     onDelete = {
-                        onDeleteTask(index)
+                        onDeleteTask(task)
                     }
                 )
 
@@ -376,10 +365,29 @@ fun TaskListScreen(
                 )
             }
 
+            if (tasks.isEmpty()) {
 
-            // =================================================
-            // ADD TASK BUTTON
-            // =================================================
+                item {
+
+                    Spacer(
+                        modifier = Modifier.height(40.dp)
+                    )
+
+                    Text(
+                        text = "No tasks yet.\nAdd your first task below.",
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(
+                            alpha = 0.6f
+                        ),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(20.dp)
+                    )
+                }
+            }
 
             item {
 
@@ -419,10 +427,6 @@ fun TaskListScreen(
 }
 
 
-// ============================================================
-// TASK CARD
-// ============================================================
-
 @Composable
 fun TaskItemCard(
     task: TaskItem,
@@ -438,7 +442,8 @@ fun TaskItemCard(
 
     val cardColor = MaterialTheme.colorScheme.surface
     val primaryText = MaterialTheme.colorScheme.onSurface
-    val secondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+    val secondaryText =
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
 
     Column(
         modifier = Modifier
@@ -455,10 +460,6 @@ fun TaskItemCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            // =================================================
-            // CHECKBOX
-            // =================================================
-
             Checkbox(
 
                 checked = task.completed,
@@ -468,15 +469,9 @@ fun TaskItemCard(
                 }
             )
 
-
             Spacer(
                 modifier = Modifier.width(6.dp)
             )
-
-
-            // =================================================
-            // TASK DETAILS
-            // =================================================
 
             Column(
                 modifier = Modifier.weight(1f)
@@ -530,11 +525,6 @@ fun TaskItemCard(
                 )
             }
 
-
-            // =================================================
-            // MORE MENU
-            // =================================================
-
             Box {
 
                 IconButton(
@@ -546,10 +536,11 @@ fun TaskItemCard(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = "More options",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                        tint = MaterialTheme.colorScheme.onSurface.copy(
+                            alpha = 0.75f
+                        )
                     )
                 }
-
 
                 DropdownMenu(
 
@@ -559,8 +550,6 @@ fun TaskItemCard(
                         showMenu = false
                     }
                 ) {
-
-                    // EDIT
 
                     DropdownMenuItem(
 
@@ -579,13 +568,9 @@ fun TaskItemCard(
                         onClick = {
 
                             showMenu = false
-
                             onEdit()
                         }
                     )
-
-
-                    // DELETE
 
                     DropdownMenuItem(
 
@@ -604,18 +589,12 @@ fun TaskItemCard(
                         onClick = {
 
                             showMenu = false
-
                             onDelete()
                         }
                     )
                 }
             }
         }
-
-
-        // =====================================================
-        // PRIORITY
-        // =====================================================
 
         Row(
             modifier = Modifier
@@ -637,10 +616,6 @@ fun TaskItemCard(
 }
 
 
-// ============================================================
-// ADD / EDIT TASK SCREEN
-// ============================================================
-
 @Composable
 fun AddTaskScreen(
     existingTask: TaskItem? = null,
@@ -652,77 +627,39 @@ fun AddTaskScreen(
     val backgroundColor = MaterialTheme.colorScheme.background
     val textColor = MaterialTheme.colorScheme.onBackground
 
-
-    // ========================================================
-    // FORM VALUES
-    // ========================================================
-
     var title by remember {
-
-        mutableStateOf(
-            existingTask?.title ?: ""
-        )
+        mutableStateOf(existingTask?.title ?: "")
     }
 
     var description by remember {
-
-        mutableStateOf(
-            existingTask?.description ?: ""
-        )
+        mutableStateOf(existingTask?.description ?: "")
     }
 
     var dueDate by remember {
-
-        mutableStateOf(
-            existingTask?.dueDate ?: ""
-        )
+        mutableStateOf(existingTask?.dueDate ?: "")
     }
 
     var dueTime by remember {
-
-        mutableStateOf(
-            existingTask?.dueTime ?: ""
-        )
+        mutableStateOf(existingTask?.dueTime ?: "")
     }
 
     var category by remember {
-
-        mutableStateOf(
-            existingTask?.category ?: ""
-        )
+        mutableStateOf(existingTask?.category ?: "")
     }
 
     var priority by remember {
-
-        mutableStateOf(
-            existingTask?.priority ?: ""
-        )
+        mutableStateOf(existingTask?.priority ?: "")
     }
-
-
-    // ========================================================
-    // ERROR MESSAGE
-    // ========================================================
 
     var errorMessage by remember {
         mutableStateOf("")
     }
-
-
-    // ========================================================
-    // SCREEN
-    // ========================================================
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
     ) {
-
-
-        // ====================================================
-        // HEADER
-        // ====================================================
 
         Row(
             modifier = Modifier
@@ -764,17 +701,10 @@ fun AddTaskScreen(
                     },
 
                 color = Color.White,
-
                 fontSize = 24.sp,
-
                 fontWeight = FontWeight.Bold
             )
         }
-
-
-        // ====================================================
-        // FORM
-        // ====================================================
 
         LazyColumn(
             modifier = Modifier
@@ -795,17 +725,11 @@ fun AddTaskScreen(
                     modifier = Modifier.height(15.dp)
                 )
 
-
-                // =================================================
-                // TITLE
-                // =================================================
-
                 OutlinedTextField(
 
                     value = title,
 
                     onValueChange = {
-
                         title = it
                         errorMessage = ""
                     },
@@ -825,15 +749,9 @@ fun AddTaskScreen(
                     shape = RoundedCornerShape(14.dp)
                 )
 
-
                 Spacer(
                     modifier = Modifier.height(12.dp)
                 )
-
-
-                // =================================================
-                // DESCRIPTION
-                // =================================================
 
                 OutlinedTextField(
 
@@ -858,22 +776,15 @@ fun AddTaskScreen(
                     shape = RoundedCornerShape(14.dp)
                 )
 
-
                 Spacer(
                     modifier = Modifier.height(12.dp)
                 )
-
-
-                // =================================================
-                // DUE DATE
-                // =================================================
 
                 OutlinedTextField(
 
                     value = dueDate,
 
                     onValueChange = {
-
                         dueDate = it
                         errorMessage = ""
                     },
@@ -893,22 +804,15 @@ fun AddTaskScreen(
                     shape = RoundedCornerShape(14.dp)
                 )
 
-
                 Spacer(
                     modifier = Modifier.height(12.dp)
                 )
-
-
-                // =================================================
-                // DUE TIME
-                // =================================================
 
                 OutlinedTextField(
 
                     value = dueTime,
 
                     onValueChange = {
-
                         dueTime = it
                         errorMessage = ""
                     },
@@ -928,22 +832,15 @@ fun AddTaskScreen(
                     shape = RoundedCornerShape(14.dp)
                 )
 
-
                 Spacer(
                     modifier = Modifier.height(12.dp)
                 )
-
-
-                // =================================================
-                // CATEGORY
-                // =================================================
 
                 OutlinedTextField(
 
                     value = category,
 
                     onValueChange = {
-
                         category = it
                         errorMessage = ""
                     },
@@ -963,22 +860,15 @@ fun AddTaskScreen(
                     shape = RoundedCornerShape(14.dp)
                 )
 
-
                 Spacer(
                     modifier = Modifier.height(12.dp)
                 )
-
-
-                // =================================================
-                // PRIORITY
-                // =================================================
 
                 OutlinedTextField(
 
                     value = priority,
 
                     onValueChange = {
-
                         priority = it
                         errorMessage = ""
                     },
@@ -998,15 +888,9 @@ fun AddTaskScreen(
                     shape = RoundedCornerShape(14.dp)
                 )
 
-
                 Spacer(
                     modifier = Modifier.height(12.dp)
                 )
-
-
-                // =================================================
-                // ERROR MESSAGE
-                // =================================================
 
                 if (errorMessage.isNotEmpty()) {
 
@@ -1021,11 +905,6 @@ fun AddTaskScreen(
                     )
                 }
 
-
-                // =================================================
-                // SAVE BUTTON
-                // =================================================
-
                 Button(
 
                     onClick = {
@@ -1033,31 +912,26 @@ fun AddTaskScreen(
                         when {
 
                             title.isBlank() -> {
-
                                 errorMessage =
                                     "Please enter a task title."
                             }
 
                             dueDate.isBlank() -> {
-
                                 errorMessage =
                                     "Please enter a due date."
                             }
 
                             dueTime.isBlank() -> {
-
                                 errorMessage =
                                     "Please enter a due time."
                             }
 
                             category.isBlank() -> {
-
                                 errorMessage =
                                     "Please enter a category."
                             }
 
                             priority.isBlank() -> {
-
                                 errorMessage =
                                     "Please enter a priority."
                             }
@@ -1067,6 +941,8 @@ fun AddTaskScreen(
                                 onSave(
 
                                     TaskItem(
+
+                                        id = existingTask?.id ?: 0,
 
                                         title = title,
 
@@ -1109,13 +985,10 @@ fun AddTaskScreen(
                             },
 
                         color = Color.White,
-
                         fontSize = 15.sp,
-
                         fontWeight = FontWeight.Bold
                     )
                 }
-
 
                 Spacer(
                     modifier = Modifier.height(25.dp)

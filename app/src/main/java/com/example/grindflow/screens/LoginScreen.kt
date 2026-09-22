@@ -1,6 +1,5 @@
 package com.example.grindflow.screens
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,30 +21,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.credentials.CredentialManager
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.GetCredentialResponse
-import androidx.credentials.exceptions.GetCredentialException
-import com.example.grindflow.R
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.GoogleAuthProvider
-import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
@@ -69,13 +56,6 @@ fun LoginScreen(
         mutableStateOf(false)
     }
 
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-
-    // =========================================================
-    // THEME COLORS
-    // =========================================================
-
     val purple = MaterialTheme.colorScheme.primary
 
     val backgroundColor =
@@ -93,114 +73,6 @@ fun LoginScreen(
     val googleTextColor =
         MaterialTheme.colorScheme.onSurfaceVariant
 
-
-    // =========================================================
-    // GOOGLE SIGN-IN
-    // =========================================================
-
-    fun signInWithGoogle() {
-
-        isLoading = true
-        errorMessage = ""
-
-        coroutineScope.launch {
-
-            try {
-
-                val credentialManager =
-                    CredentialManager.create(context)
-
-                val googleIdOption =
-                    GetGoogleIdOption.Builder()
-                        .setFilterByAuthorizedAccounts(false)
-                        .setServerClientId(
-                            context.getString(
-                                R.string.default_web_client_id
-                            )
-                        )
-                        .setAutoSelectEnabled(false)
-                        .build()
-
-                val request =
-                    GetCredentialRequest.Builder()
-                        .addCredentialOption(
-                            googleIdOption
-                        )
-                        .build()
-
-                val result: GetCredentialResponse =
-                    credentialManager.getCredential(
-                        context,
-                        request
-                    )
-
-                val credential =
-                    result.credential
-
-                val googleIdTokenCredential =
-                    GoogleIdTokenCredential
-                        .createFrom(credential.data)
-
-                val idToken =
-                    googleIdTokenCredential.idToken
-
-                val firebaseCredential =
-                    GoogleAuthProvider.getCredential(
-                        idToken,
-                        null
-                    )
-
-                FirebaseAuth
-                    .getInstance()
-                    .signInWithCredential(
-                        firebaseCredential
-                    )
-                    .addOnCompleteListener { task ->
-
-                        isLoading = false
-
-                        if (task.isSuccessful) {
-
-                            onLogin()
-
-                        } else {
-
-                            errorMessage =
-                                task.exception?.message
-                                    ?: "Google sign-in failed."
-                        }
-                    }
-
-            } catch (e: GetCredentialException) {
-
-                isLoading = false
-
-                errorMessage =
-                    "Google sign-in was cancelled or could not be completed."
-
-            } catch (e: GoogleIdTokenParsingException) {
-
-                isLoading = false
-
-                errorMessage =
-                    "Could not process the Google account."
-
-            } catch (e: Exception) {
-
-                isLoading = false
-
-                errorMessage =
-                    e.message
-                        ?: "Google sign-in failed."
-            }
-        }
-    }
-
-
-    // =========================================================
-    // MAIN SCREEN
-    // =========================================================
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -216,10 +88,6 @@ fun LoginScreen(
 
             verticalArrangement = Arrangement.Center
         ) {
-
-            // =================================================
-            // GRINDFLOW LOGO
-            // =================================================
 
             Box(
                 modifier = Modifier
@@ -245,15 +113,9 @@ fun LoginScreen(
                 )
             }
 
-
             Spacer(
                 modifier = Modifier.height(20.dp)
             )
-
-
-            // =================================================
-            // APP NAME
-            // =================================================
 
             Text(
                 text = "GrindFlow",
@@ -262,15 +124,9 @@ fun LoginScreen(
                 color = primaryText
             )
 
-
             Spacer(
                 modifier = Modifier.height(6.dp)
             )
-
-
-            // =================================================
-            // TAGLINE
-            // =================================================
 
             Text(
                 text = "Plan your day. Complete your goals.",
@@ -279,15 +135,9 @@ fun LoginScreen(
                 textAlign = TextAlign.Center
             )
 
-
             Spacer(
                 modifier = Modifier.height(35.dp)
             )
-
-
-            // =================================================
-            // EMAIL
-            // =================================================
 
             OutlinedTextField(
                 value = email,
@@ -308,15 +158,9 @@ fun LoginScreen(
                 shape = RoundedCornerShape(14.dp)
             )
 
-
             Spacer(
                 modifier = Modifier.height(16.dp)
             )
-
-
-            // =================================================
-            // PASSWORD
-            // =================================================
 
             OutlinedTextField(
                 value = password,
@@ -340,15 +184,9 @@ fun LoginScreen(
                 shape = RoundedCornerShape(14.dp)
             )
 
-
             Spacer(
                 modifier = Modifier.height(6.dp)
             )
-
-
-            // =================================================
-            // FORGOT PASSWORD
-            // =================================================
 
             TextButton(
 
@@ -361,30 +199,28 @@ fun LoginScreen(
 
                     } else {
 
-                        FirebaseAuth
-                            .getInstance()
-                            .sendPasswordResetEmail(
-                                email.trim()
-                            )
-                            .addOnCompleteListener { task ->
+                        val auth =
+                            FirebaseAuth.getInstance()
 
-                                if (task.isSuccessful) {
+                        auth.sendPasswordResetEmail(
+                            email.trim()
+                        ).addOnCompleteListener { task ->
 
-                                    errorMessage =
-                                        "Password reset email sent. Check your inbox."
+                            if (task.isSuccessful) {
 
-                                } else {
+                                errorMessage =
+                                    "Password reset email sent. Check your inbox."
 
-                                    errorMessage =
-                                        "Could not send password reset email."
-                                }
+                            } else {
+
+                                errorMessage =
+                                    "Could not send password reset email."
                             }
+                        }
                     }
                 },
 
-                modifier = Modifier.align(
-                    Alignment.End
-                )
+                modifier = Modifier.align(Alignment.End)
             ) {
 
                 Text(
@@ -393,11 +229,6 @@ fun LoginScreen(
                     fontSize = 14.sp
                 )
             }
-
-
-            // =================================================
-            // ERROR / STATUS MESSAGE
-            // =================================================
 
             if (errorMessage.isNotEmpty()) {
 
@@ -413,11 +244,6 @@ fun LoginScreen(
                     modifier = Modifier.height(8.dp)
                 )
             }
-
-
-            // =================================================
-            // LOGIN BUTTON
-            // =================================================
 
             Button(
 
@@ -442,26 +268,26 @@ fun LoginScreen(
                             errorMessage = ""
                             isLoading = true
 
-                            FirebaseAuth
-                                .getInstance()
-                                .signInWithEmailAndPassword(
-                                    email.trim(),
-                                    password
-                                )
-                                .addOnCompleteListener { task ->
+                            val auth =
+                                FirebaseAuth.getInstance()
 
-                                    isLoading = false
+                            auth.signInWithEmailAndPassword(
+                                email.trim(),
+                                password
+                            ).addOnCompleteListener { task ->
 
-                                    if (task.isSuccessful) {
+                                isLoading = false
 
-                                        onLogin()
+                                if (task.isSuccessful) {
 
-                                    } else {
+                                    onLogin()
 
-                                        errorMessage =
-                                            "Incorrect email or password."
-                                    }
+                                } else {
+
+                                    errorMessage =
+                                        "Incorrect email or password."
                                 }
+                            }
                         }
                     }
                 },
@@ -494,15 +320,9 @@ fun LoginScreen(
                 )
             }
 
-
             Spacer(
                 modifier = Modifier.height(18.dp)
             )
-
-
-            // =================================================
-            // OR
-            // =================================================
 
             Text(
                 text = "OR",
@@ -510,23 +330,15 @@ fun LoginScreen(
                 fontSize = 13.sp
             )
 
-
             Spacer(
                 modifier = Modifier.height(18.dp)
             )
 
-
-            // =================================================
-            // GOOGLE SSO
-            // =================================================
-
             Button(
 
                 onClick = {
-                    signInWithGoogle()
+                    // Google Sign-In will be implemented later.
                 },
-
-                enabled = !isLoading,
 
                 modifier = Modifier
                     .fillMaxWidth()
@@ -540,29 +352,16 @@ fun LoginScreen(
             ) {
 
                 Text(
-                    text = if (isLoading) {
-                        "CONNECTING..."
-                    } else {
-                        "Continue with Google"
-                    },
-
+                    text = "Continue with Google",
                     color = googleTextColor,
-
                     fontSize = 15.sp,
-
                     fontWeight = FontWeight.Bold
                 )
             }
 
-
             Spacer(
                 modifier = Modifier.height(22.dp)
             )
-
-
-            // =================================================
-            // ACCOUNT MESSAGE
-            // =================================================
 
             Text(
                 text = "Don't have an account?",
@@ -570,14 +369,8 @@ fun LoginScreen(
                 fontSize = 14.sp
             )
 
-
-            // =================================================
-            // CREATE ACCOUNT
-            // =================================================
-
             TextButton(
-                onClick = onCreateAccount,
-                enabled = !isLoading
+                onClick = onCreateAccount
             ) {
 
                 Text(
