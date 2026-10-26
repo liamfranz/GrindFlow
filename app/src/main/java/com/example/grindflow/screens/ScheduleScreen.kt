@@ -1,9 +1,9 @@
+
 package com.example.grindflow.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,458 +11,297 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-
-// ============================================================
-// SCHEDULE DATA
-// ============================================================
-
-data class ScheduleItem(
-    val title: String,
-    val description: String,
-    val date: String,
-    val startTime: String,
-    val endTime: String,
-    val category: String,
-    val reminder: String
-)
-
-
-// ============================================================
-// MAIN SCHEDULE SCREEN
-// ============================================================
+import androidx.compose.ui.platform.LocalContext
+import com.example.grindflow.data.GrindFlowDatabase
+import com.example.grindflow.data.ScheduleEntity
+import kotlinx.coroutines.launch
+import java.text.ParsePosition
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 @Composable
 fun ScheduleScreen(
     onBackToHome: () -> Unit
 ) {
-
-    var showAddSchedule by remember {
-        mutableStateOf(false)
+    val context = LocalContext.current
+    val database = remember(context) {
+        GrindFlowDatabase.getDatabase(context)
     }
+    val scheduleDao = database.scheduleDao()
+    val schedules by scheduleDao.getAllSchedules()
+        .collectAsState(initial = emptyList())
 
-    var editingIndex by remember {
-        mutableIntStateOf(-1)
+    val scope = rememberCoroutineScope()
+
+    var showForm by remember { mutableStateOf(false) }
+    var editingSchedule by remember {
+        mutableStateOf<ScheduleEntity?>(null)
     }
-
-    // ========================================================
-    // ANDROID SYSTEM BACK BUTTON
-    // ========================================================
 
     BackHandler {
-
-        if (showAddSchedule) {
-
-            showAddSchedule = false
-            editingIndex = -1
-
+        if (showForm) {
+            showForm = false
+            editingSchedule = null
         } else {
-
             onBackToHome()
         }
     }
 
-    // ========================================================
-    // SAMPLE SCHEDULE DATA
-    // ========================================================
-
-    val schedules = remember {
-
-        mutableStateListOf(
-
-            ScheduleItem(
-                title = "Software Development",
-                description = "Work on the GrindFlow application",
-                date = "15 September 2026",
-                startTime = "08:00",
-                endTime = "10:00",
-                category = "College",
-                reminder = "10 minutes before"
-            ),
-
-            ScheduleItem(
-                title = "Complete Assignment",
-                description = "Work on software testing assignment",
-                date = "15 September 2026",
-                startTime = "11:00",
-                endTime = "13:00",
-                category = "Study",
-                reminder = "15 minutes before"
-            ),
-
-            ScheduleItem(
-                title = "Home Workout",
-                description = "Complete home workout session",
-                date = "15 September 2026",
-                startTime = "17:00",
-                endTime = "18:00",
-                category = "Personal",
-                reminder = "30 minutes before"
-            )
-        )
-    }
-
-    // ========================================================
-    // ADD / EDIT SCREEN
-    // ========================================================
-
-    if (showAddSchedule) {
-
-        val scheduleToEdit =
-            if (
-                editingIndex >= 0 &&
-                editingIndex < schedules.size
-            ) {
-                schedules[editingIndex]
-            } else {
-                null
-            }
-
-        AddScheduleScreen(
-
-            existingSchedule = scheduleToEdit,
-
+    if (showForm) {
+        ScheduleFormScreen(
+            existingSchedule = editingSchedule,
             onBack = {
-
-                showAddSchedule = false
-                editingIndex = -1
+                showForm = false
+                editingSchedule = null
             },
+            onSave = { schedule ->
+                scope.launch {
+                    if (schedule.id == 0) {
+                        scheduleDao.insertSchedule(schedule)
+                    } else {
+                        scheduleDao.updateSchedule(schedule)
+                    }
 
-            onSave = { updatedSchedule ->
-
-                if (
-                    editingIndex >= 0 &&
-                    editingIndex < schedules.size
-                ) {
-
-                    schedules[editingIndex] = updatedSchedule
-
-                } else {
-
-                    schedules.add(updatedSchedule)
+                    showForm = false
+                    editingSchedule = null
                 }
-
-                showAddSchedule = false
-                editingIndex = -1
             }
         )
-
     } else {
-
-        // ====================================================
-        // SCHEDULE LIST
-        // ====================================================
-
         ScheduleListScreen(
-
             schedules = schedules,
-
             onAddSchedule = {
-
-                editingIndex = -1
-                showAddSchedule = true
+                editingSchedule = null
+                showForm = true
             },
-
-            onEditSchedule = { index ->
-
-                editingIndex = index
-                showAddSchedule = true
+            onEditSchedule = { schedule ->
+                editingSchedule = schedule
+                showForm = true
             },
-
-            onDeleteSchedule = { index ->
-
-                if (
-                    index >= 0 &&
-                    index < schedules.size
-                ) {
-
-                    schedules.removeAt(index)
+            onDeleteSchedule = { schedule ->
+                scope.launch {
+                    scheduleDao.deleteSchedule(schedule)
                 }
             },
-
-            onBackToHome = {
-
-                onBackToHome()
-            }
+            onBackToHome = onBackToHome
         )
     }
 }
 
-
-// ============================================================
-// SCHEDULE LIST
-// ============================================================
-
 @Composable
-fun ScheduleListScreen(
-    schedules: List<ScheduleItem>,
+private fun ScheduleListScreen(
+    schedules: List<ScheduleEntity>,
     onAddSchedule: () -> Unit,
-    onEditSchedule: (Int) -> Unit,
-    onDeleteSchedule: (Int) -> Unit,
+    onEditSchedule: (ScheduleEntity) -> Unit,
+    onDeleteSchedule: (ScheduleEntity) -> Unit,
     onBackToHome: () -> Unit
 ) {
-
-    val purple = MaterialTheme.colorScheme.primary
-    val backgroundColor = MaterialTheme.colorScheme.background
-    val cardColor = MaterialTheme.colorScheme.surface
+    val primaryColor = MaterialTheme.colorScheme.primary
     val textColor = MaterialTheme.colorScheme.onSurface
     val secondaryTextColor =
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+        textColor.copy(alpha = 0.65f)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(backgroundColor)
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
-        // ====================================================
-        // HEADER
-        // ====================================================
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(purple)
-                .padding(
-                    start = 8.dp,
-                    end = 20.dp,
-                    top = 15.dp,
-                    bottom = 15.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            IconButton(
-                onClick = {
-                    onBackToHome()
-                }
+            // Header
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(primaryColor)
+                    .padding(horizontal = 20.dp, vertical = 18.dp)
             ) {
-
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back to Home",
-                    tint = Color.White
-                )
-            }
-
-            Spacer(
-                modifier = Modifier.width(8.dp)
-            )
-
-            Column {
+                TextButton(onClick = onBackToHome) {
+                    Text(
+                        text = "← Back to Home",
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
 
                 Text(
                     text = "Schedule",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold
                 )
 
+                Spacer(modifier = Modifier.height(4.dp))
+
                 Text(
                     text = "Plan and organise your activities",
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = MaterialTheme.colorScheme.onPrimary
+                        .copy(alpha = 0.85f),
                     fontSize = 14.sp
                 )
             }
-        }
 
-        // ====================================================
-        // TITLE
-        // ====================================================
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = 20.dp,
-                    vertical = 15.dp
-                ),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            Text(
-                text = "Today's Activities",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = textColor
-            )
-
-            Text(
-                text = "${schedules.size} activities",
-                fontSize = 13.sp,
-                color = secondaryTextColor
-            )
-        }
-
-        // ====================================================
-        // SCHEDULE LIST
-        // ====================================================
-
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-        ) {
-
-            itemsIndexed(schedules) { index, schedule ->
-
-                ScheduleItemCard(
-
-                    schedule = schedule,
-
-                    purple = purple,
-
-                    cardColor = cardColor,
-
-                    textColor = textColor,
-
-                    secondaryTextColor = secondaryTextColor,
-
-                    onEdit = {
-                        onEditSchedule(index)
-                    },
-
-                    onDelete = {
-                        onDeleteSchedule(index)
-                    }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "All Activities",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor
                 )
 
-                Spacer(
-                    modifier = Modifier.height(12.dp)
+                Text(
+                    text = "${schedules.size} activities",
+                    fontSize = 13.sp,
+                    color = secondaryTextColor
                 )
             }
 
-            // =================================================
-            // ADD SCHEDULE BUTTON
-            // =================================================
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (schedules.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor =
+                                    MaterialTheme.colorScheme.surface
+                            ),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "No activities yet",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    color = textColor
+                                )
 
-            item {
+                                Spacer(modifier = Modifier.height(6.dp))
 
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
+                                Text(
+                                    text = "Add an activity to start organising your schedule.",
+                                    color = secondaryTextColor,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+                }
 
-                Button(
-
-                    onClick = onAddSchedule,
-
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(55.dp),
-
-                    shape = RoundedCornerShape(14.dp),
-
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = purple
-                    )
-                ) {
-
-                    Text(
-                        text = "+  ADD SCHEDULE",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
+                items(
+                    items = schedules,
+                    key = { it.id }
+                ) { schedule ->
+                    ScheduleActivityCard(
+                        schedule = schedule,
+                        onEdit = { onEditSchedule(schedule) },
+                        onDelete = { onDeleteSchedule(schedule) }
                     )
                 }
 
-                Spacer(
-                    modifier = Modifier.height(25.dp)
-                )
+                item {
+                    Button(
+                        onClick = onAddSchedule,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(55.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = primaryColor
+                        )
+                    ) {
+                        Text(
+                            text = "+  ADD ACTIVITY",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
             }
         }
     }
 }
 
-
-// ============================================================
-// SCHEDULE CARD
-// ============================================================
-
 @Composable
-fun ScheduleItemCard(
-    schedule: ScheduleItem,
-    purple: Color,
-    cardColor: Color,
-    textColor: Color,
-    secondaryTextColor: Color,
+private fun ScheduleActivityCard(
+    schedule: ScheduleEntity,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-
-    var showMenu by remember {
+    var showMenu by remember(schedule.id) {
         mutableStateOf(false)
     }
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor =
+        textColor.copy(alpha = 0.65f)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = cardColor
+            containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
-
-            // =================================================
-            // TIME
-            // =================================================
-
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.width(75.dp)
+                modifier = Modifier.width(76.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
                 Text(
                     text = schedule.startTime,
-                    color = purple,
+                    color = primaryColor,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -474,18 +313,12 @@ fun ScheduleItemCard(
                 )
             }
 
-            Spacer(
-                modifier = Modifier.width(12.dp)
-            )
-
-            // =================================================
-            // DETAILS
-            // =================================================
+            Spacer(modifier = Modifier.width(12.dp))
 
             Column(
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-
                 Text(
                     text = schedule.title,
                     fontSize = 16.sp,
@@ -493,121 +326,57 @@ fun ScheduleItemCard(
                     color = textColor
                 )
 
-                Spacer(
-                    modifier = Modifier.height(4.dp)
-                )
-
                 Text(
                     text = schedule.category,
                     fontSize = 12.sp,
-                    color = purple,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = primaryColor
                 )
 
-                Spacer(
-                    modifier = Modifier.height(4.dp)
-                )
-
-                if (schedule.description.isNotEmpty()) {
-
+                if (schedule.description.isNotBlank()) {
                     Text(
                         text = schedule.description,
                         fontSize = 13.sp,
                         color = secondaryTextColor
                     )
-
-                    Spacer(
-                        modifier = Modifier.height(4.dp)
-                    )
                 }
 
                 Text(
-                    text = "Date: ${schedule.date}",
+                    text = "Date: ${displayScheduleDate(schedule.date)}",
                     fontSize = 12.sp,
                     color = secondaryTextColor
                 )
 
-                Spacer(
-                    modifier = Modifier.height(4.dp)
-                )
-
-                Text(
-                    text = "🔔 ${schedule.reminder}",
-                    fontSize = 12.sp,
-                    color = secondaryTextColor
-                )
+                if (schedule.reminder != "No reminder") {
+                    Text(
+                        text = "🔔 ${schedule.reminder}",
+                        fontSize = 12.sp,
+                        color = secondaryTextColor
+                    )
+                }
             }
 
-            // =================================================
-            // MENU
-            // =================================================
-
-            Box {
-
-                IconButton(
-                    onClick = {
-                        showMenu = true
-                    }
-                ) {
-
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More options",
-                        tint = textColor
-                    )
+            Column {
+                TextButton(onClick = { showMenu = true }) {
+                    Text("More", color = primaryColor)
                 }
 
                 DropdownMenu(
-
                     expanded = showMenu,
-
-                    onDismissRequest = {
-                        showMenu = false
-                    }
+                    onDismissRequest = { showMenu = false }
                 ) {
-
-                    // EDIT
                     DropdownMenuItem(
-
-                        text = {
-                            Text("Edit")
-                        },
-
-                        leadingIcon = {
-
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit"
-                            )
-                        },
-
+                        text = { Text("Edit") },
                         onClick = {
-
                             showMenu = false
-
                             onEdit()
                         }
                     )
 
-                    // DELETE
                     DropdownMenuItem(
-
-                        text = {
-                            Text("Delete")
-                        },
-
-                        leadingIcon = {
-
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete"
-                            )
-                        },
-
+                        text = { Text("Delete") },
                         onClick = {
-
                             showMenu = false
-
                             onDelete()
                         }
                     )
@@ -617,103 +386,49 @@ fun ScheduleItemCard(
     }
 }
 
-
-// ============================================================
-// ADD / EDIT SCHEDULE SCREEN
-// ============================================================
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddScheduleScreen(
-    existingSchedule: ScheduleItem? = null,
+private fun ScheduleFormScreen(
+    existingSchedule: ScheduleEntity?,
     onBack: () -> Unit,
-    onSave: (ScheduleItem) -> Unit
+    onSave: (ScheduleEntity) -> Unit
 ) {
-
-    val purple = MaterialTheme.colorScheme.primary
-    val backgroundColor = MaterialTheme.colorScheme.background
+    val primaryColor = MaterialTheme.colorScheme.primary
     val textColor = MaterialTheme.colorScheme.onSurface
-    val secondaryTextColor =
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
 
-    // ========================================================
-    // FORM VALUES
-    // ========================================================
-
-    var title by remember {
+    var title by remember(existingSchedule?.id) {
+        mutableStateOf(existingSchedule?.title ?: "")
+    }
+    var description by remember(existingSchedule?.id) {
+        mutableStateOf(existingSchedule?.description ?: "")
+    }
+    var date by remember(existingSchedule?.id) {
         mutableStateOf(
-            existingSchedule?.title ?: ""
+            existingSchedule?.date?.let {
+                displayScheduleDate(it)
+            } ?: ""
         )
     }
-
-    var description by remember {
+    var startTime by remember(existingSchedule?.id) {
+        mutableStateOf(existingSchedule?.startTime ?: "")
+    }
+    var endTime by remember(existingSchedule?.id) {
+        mutableStateOf(existingSchedule?.endTime ?: "")
+    }
+    var category by remember(existingSchedule?.id) {
+        mutableStateOf(existingSchedule?.category ?: "Personal")
+    }
+    var reminder by remember(existingSchedule?.id) {
         mutableStateOf(
-            existingSchedule?.description ?: ""
+            existingSchedule?.reminder ?: "No reminder"
         )
     }
-
-    var date by remember {
-        mutableStateOf(
-            existingSchedule?.date ?: ""
-        )
-    }
-
-    var startTime by remember {
-        mutableStateOf(
-            existingSchedule?.startTime ?: ""
-        )
-    }
-
-    var endTime by remember {
-        mutableStateOf(
-            existingSchedule?.endTime ?: ""
-        )
-    }
-
-    var category by remember {
-        mutableStateOf(
-            existingSchedule?.category ?: ""
-        )
-    }
-
-    var reminder by remember {
-        mutableStateOf(
-            existingSchedule?.reminder ?: ""
-        )
-    }
-
-    // ========================================================
-    // DROPDOWN STATES
-    // ========================================================
-
-    var showCategoryMenu by remember {
-        mutableStateOf(false)
-    }
-
-    var showReminderMenu by remember {
-        mutableStateOf(false)
-    }
-
-    // ========================================================
-    // ERROR
-    // ========================================================
-
-    var errorMessage by remember {
+    var errorMessage by remember(existingSchedule?.id) {
         mutableStateOf("")
     }
 
-    // ========================================================
-    // OPTIONS
-    // ========================================================
-
     val categories = listOf(
-        "College",
-        "Study",
-        "Work",
-        "Personal",
-        "Other"
+        "College", "Study", "Work", "Personal", "Other"
     )
-
     val reminders = listOf(
         "No reminder",
         "5 minutes before",
@@ -723,541 +438,281 @@ fun AddScheduleScreen(
         "1 hour before"
     )
 
-    // ========================================================
-    // SCREEN
-    // ========================================================
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(backgroundColor)
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
-        // ====================================================
-        // HEADER
-        // ====================================================
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(purple)
-                .padding(
-                    start = 8.dp,
-                    end = 20.dp,
-                    top = 10.dp,
-                    bottom = 10.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            IconButton(
-                onClick = {
-                    onBack()
-                }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(primaryColor)
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
+                TextButton(onClick = onBack) {
+                    Text(
+                        text = "← Back",
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
 
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White
+                Text(
+                    text = if (existingSchedule == null) {
+                        "Add Activity"
+                    } else {
+                        "Edit Activity"
+                    },
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
             }
 
-            Spacer(
-                modifier = Modifier.width(8.dp)
-            )
-
-            Text(
-                text =
-                    if (existingSchedule == null)
-                        "Add Schedule"
-                    else
-                        "Edit Schedule",
-                color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        // ====================================================
-        // FORM
-        // ====================================================
-
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .padding(20.dp)
-        ) {
-
-            item {
-
-                Text(
-                    text = "Activity Details",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textColor
-                )
-
-                Spacer(
-                    modifier = Modifier.height(15.dp)
-                )
-
-                // =================================================
-                // TITLE
-                // =================================================
-
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
-
                     value = title,
-
                     onValueChange = {
-
                         title = it
                         errorMessage = ""
                     },
-
                     modifier = Modifier.fillMaxWidth(),
-
-                    label = {
-                        Text("Activity Title")
-                    },
-
-                    placeholder = {
-                        Text("e.g. Study for test")
-                    },
-
+                    label = { Text("Activity Title") },
+                    placeholder = { Text("e.g. Study for test") },
                     singleLine = true,
-
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                // =================================================
-                // DESCRIPTION
-                // =================================================
 
                 OutlinedTextField(
-
                     value = description,
-
-                    onValueChange = {
-
-                        description = it
-                    },
-
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(110.dp),
-
-                    label = {
-                        Text("Description")
-                    },
-
-                    placeholder = {
-                        Text("Add some details...")
-                    },
-
-                    shape = RoundedCornerShape(14.dp)
+                    onValueChange = { description = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Description") },
+                    placeholder = { Text("Add some details") },
+                    minLines = 3,
+                    shape = RoundedCornerShape(12.dp)
                 )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                // =================================================
-                // DATE
-                // =================================================
 
                 OutlinedTextField(
-
                     value = date,
-
                     onValueChange = {
-
                         date = it
                         errorMessage = ""
                     },
-
                     modifier = Modifier.fillMaxWidth(),
-
-                    label = {
-                        Text("Date")
-                    },
-
-                    placeholder = {
-                        Text("e.g. 15 September 2026")
-                    },
-
+                    label = { Text("Date") },
+                    placeholder = { Text("2026-10-26 or 26 October 2026") },
                     singleLine = true,
-
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                // =================================================
-                // START TIME
-                // =================================================
 
                 OutlinedTextField(
-
                     value = startTime,
-
                     onValueChange = {
-
                         startTime = it
                         errorMessage = ""
                     },
-
                     modifier = Modifier.fillMaxWidth(),
-
-                    label = {
-                        Text("Start Time")
-                    },
-
-                    placeholder = {
-                        Text("e.g. 08:00")
-                    },
-
+                    label = { Text("Start Time (24-hour format)") },
+                    placeholder = { Text("e.g. 08:00") },
                     singleLine = true,
-
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number
-                    ),
-
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                // =================================================
-                // END TIME
-                // =================================================
 
                 OutlinedTextField(
-
                     value = endTime,
-
                     onValueChange = {
-
                         endTime = it
                         errorMessage = ""
                     },
-
                     modifier = Modifier.fillMaxWidth(),
-
-                    label = {
-                        Text("End Time")
-                    },
-
-                    placeholder = {
-                        Text("e.g. 10:00")
-                    },
-
+                    label = { Text("End Time (24-hour format)") },
+                    placeholder = { Text("e.g. 10:00") },
                     singleLine = true,
-
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number
-                    ),
-
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(
-                    modifier = Modifier.height(12.dp)
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Category") },
+                    placeholder = { Text(categories.joinToString(", ")) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
                 )
 
-                // =================================================
-                // CATEGORY
-                // =================================================
-
-                ExposedDropdownMenuBox(
-
-                    expanded = showCategoryMenu,
-
-                    onExpandedChange = {
-
-                        showCategoryMenu =
-                            !showCategoryMenu
-                    }
-                ) {
-
-                    OutlinedTextField(
-
-                        value = category,
-
-                        onValueChange = {},
-
-                        readOnly = true,
-
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(
-                                type = MenuAnchorType.PrimaryNotEditable,
-                                enabled = true
-                            ),
-
-                        label = {
-                            Text("Category")
-                        },
-
-                        placeholder = {
-                            Text("Select a category")
-                        },
-
-                        trailingIcon = {
-
-                            ExposedDropdownMenuDefaults.TrailingIcon(
-                                expanded = showCategoryMenu
-                            )
-                        },
-
-                        shape = RoundedCornerShape(14.dp)
-                    )
-
-                    ExposedDropdownMenu(
-
-                        expanded = showCategoryMenu,
-
-                        onDismissRequest = {
-
-                            showCategoryMenu = false
-                        }
-                    ) {
-
-                        categories.forEach { item ->
-
-                            DropdownMenuItem(
-
-                                text = {
-                                    Text(item)
-                                },
-
-                                onClick = {
-
-                                    category = item
-
-                                    showCategoryMenu = false
-
-                                    errorMessage = ""
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
+                Text(
+                    text = "Suggested categories: ${categories.joinToString(", ")}",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    fontSize = 12.sp
                 )
 
-                // =================================================
-                // REMINDER
-                // =================================================
-
-                ExposedDropdownMenuBox(
-
-                    expanded = showReminderMenu,
-
-                    onExpandedChange = {
-
-                        showReminderMenu =
-                            !showReminderMenu
-                    }
-                ) {
-
-                    OutlinedTextField(
-
-                        value = reminder,
-
-                        onValueChange = {},
-
-                        readOnly = true,
-
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(
-                                type = MenuAnchorType.PrimaryNotEditable,
-                                enabled = true
-                            ),
-
-                        label = {
-                            Text("Reminder")
-                        },
-
-                        placeholder = {
-                            Text("Select reminder")
-                        },
-
-                        trailingIcon = {
-
-                            ExposedDropdownMenuDefaults.TrailingIcon(
-                                expanded = showReminderMenu
-                            )
-                        },
-
-                        shape = RoundedCornerShape(14.dp)
-                    )
-
-                    ExposedDropdownMenu(
-
-                        expanded = showReminderMenu,
-
-                        onDismissRequest = {
-
-                            showReminderMenu = false
-                        }
-                    ) {
-
-                        reminders.forEach { item ->
-
-                            DropdownMenuItem(
-
-                                text = {
-                                    Text(item)
-                                },
-
-                                onClick = {
-
-                                    reminder = item
-
-                                    showReminderMenu = false
-
-                                    errorMessage = ""
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
+                OutlinedTextField(
+                    value = reminder,
+                    onValueChange = { reminder = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Reminder") },
+                    placeholder = { Text(reminders.joinToString(", ")) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
                 )
 
-                // =================================================
-                // ERROR
-                // =================================================
+                Text(
+                    text = "Suggested reminders: ${reminders.joinToString(", ")}",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    fontSize = 12.sp
+                )
 
-                if (errorMessage.isNotEmpty()) {
-
+                if (errorMessage.isNotBlank()) {
                     Text(
                         text = errorMessage,
                         color = MaterialTheme.colorScheme.error,
-                        fontSize = 13.sp
-                    )
-
-                    Spacer(
-                        modifier = Modifier.height(8.dp)
+                        fontSize = 14.sp
                     )
                 }
 
-                // =================================================
-                // SAVE BUTTON
-                // =================================================
-
                 Button(
-
                     onClick = {
-
-                        when {
-
-                            title.isBlank() -> {
-
-                                errorMessage =
-                                    "Please enter an activity title."
-                            }
-
-                            date.isBlank() -> {
-
-                                errorMessage =
-                                    "Please enter a date."
-                            }
-
-                            startTime.isBlank() -> {
-
-                                errorMessage =
-                                    "Please enter a start time."
-                            }
-
-                            endTime.isBlank() -> {
-
-                                errorMessage =
-                                    "Please enter an end time."
-                            }
-
-                            category.isBlank() -> {
-
-                                errorMessage =
-                                    "Please select a category."
-                            }
-
-                            reminder.isBlank() -> {
-
-                                errorMessage =
-                                    "Please select a reminder."
-                            }
-
-                            else -> {
-
-                                onSave(
-
-                                    ScheduleItem(
-
-                                        title = title,
-
-                                        description = description,
-
-                                        date = date,
-
-                                        startTime = startTime,
-
-                                        endTime = endTime,
-
-                                        category = category,
-
-                                        reminder = reminder
-                                    )
-                                )
-                            }
+                        if (title.isBlank()) {
+                            errorMessage = "Please enter an activity title."
+                            return@Button
                         }
-                    },
 
+                        val normalizedDate = parseScheduleDate(date)
+                        if (normalizedDate == null) {
+                            errorMessage =
+                                "Enter a valid date, such as 2026-10-26."
+                            return@Button
+                        }
+
+                        val startMinutes = parseTimeMinutes(startTime)
+                        if (startMinutes == null) {
+                            errorMessage =
+                                "Enter a valid start time in HH:mm format, e.g. 08:00."
+                            return@Button
+                        }
+
+                        val endMinutes = parseTimeMinutes(endTime)
+                        if (endMinutes == null) {
+                            errorMessage =
+                                "Enter a valid end time in HH:mm format, e.g. 10:00."
+                            return@Button
+                        }
+
+                        if (endMinutes <= startMinutes) {
+                            errorMessage =
+                                "End time must be later than start time."
+                            return@Button
+                        }
+
+                        if (category.isBlank()) {
+                            errorMessage = "Please enter a category."
+                            return@Button
+                        }
+
+                        onSave(
+                            ScheduleEntity(
+                                id = existingSchedule?.id ?: 0,
+                                title = title.trim(),
+                                description = description.trim(),
+                                date = normalizedDate,
+                                startTime = startTime.trim(),
+                                endTime = endTime.trim(),
+                                category = category.trim(),
+                                reminder = reminder.trim().ifBlank {
+                                    "No reminder"
+                                }
+                            )
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(55.dp),
-
-                    shape = RoundedCornerShape(14.dp),
-
+                        .height(54.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = purple
+                        containerColor = primaryColor
                     )
                 ) {
-
                     Text(
-                        text =
-                            if (existingSchedule == null)
-                                "SAVE SCHEDULE"
-                            else
-                                "UPDATE SCHEDULE",
-
-                        color = Color.White,
-
-                        fontSize = 15.sp,
-
+                        text = if (existingSchedule == null) {
+                            "SAVE ACTIVITY"
+                        } else {
+                            "UPDATE ACTIVITY"
+                        },
                         fontWeight = FontWeight.Bold
                     )
                 }
 
-                Spacer(
-                    modifier = Modifier.height(25.dp)
-                )
+                TextButton(
+                    onClick = onBack,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cancel", color = textColor)
+                }
             }
         }
     }
+}
+
+private fun parseScheduleDate(input: String): String? {
+    val trimmed = input.trim()
+
+    val patterns = listOf(
+        "yyyy-MM-dd",
+        "d MMMM yyyy",
+        "dd MMMM yyyy",
+        "d MMM yyyy",
+        "dd/MM/yyyy"
+    )
+
+    for (pattern in patterns) {
+        val formatter = SimpleDateFormat(pattern, Locale.ENGLISH)
+        formatter.isLenient = false
+
+        val position = ParsePosition(0)
+        val parsed = formatter.parse(trimmed, position)
+
+        if (parsed != null && position.index == trimmed.length) {
+            return SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                .format(parsed)
+        }
+    }
+
+    return null
+}
+
+private fun parseTimeMinutes(input: String): Int? {
+    val time = input.trim()
+    if (!time.matches(Regex("\\d{2}:\\d{2}"))) return null
+
+    val parts = time.split(":")
+    val hour = parts[0].toIntOrNull() ?: return null
+    val minute = parts[1].toIntOrNull() ?: return null
+
+    if (hour !in 0..23 || minute !in 0..59) return null
+
+    return hour * 60 + minute
+}
+
+private fun displayScheduleDate(isoDate: String): String {
+    val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        isLenient = false
+    }
+
+    val position = ParsePosition(0)
+    val parsed = inputFormat.parse(isoDate, position)
+        ?: return isoDate
+
+    if (position.index != isoDate.length) return isoDate
+
+    return SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
+        .format(parsed)
 }

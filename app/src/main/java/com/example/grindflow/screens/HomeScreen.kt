@@ -1,3 +1,4 @@
+
 package com.example.grindflow.screens
 
 import androidx.activity.compose.BackHandler
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -24,14 +26,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
+import com.example.grindflow.data.GrindFlowDatabase
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun HomeScreen(
@@ -40,29 +49,60 @@ fun HomeScreen(
     onProgressClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
+    val context = LocalContext.current
 
-    // Theme-aware colours
+    val database = remember(context) {
+        GrindFlowDatabase.getDatabase(context)
+    }
+
+    // Observe task and schedule records from Room.
+    val tasks by database.taskDao()
+        .getAllTasks()
+        .collectAsState(initial = emptyList())
+
+    val schedules by database.scheduleDao()
+        .getAllSchedules()
+        .collectAsState(initial = emptyList())
+
+    // Store dates in the same ISO format as ScheduleEntity.
+    val todayIso = SimpleDateFormat(
+        "yyyy-MM-dd",
+        Locale.US
+    ).format(Date())
+
+    val todaysSchedules = schedules
+        .filter { it.date == todayIso }
+        .sortedBy { it.startTime }
+
+    // Calculate progress from actual saved task records.
+    val totalTasks = tasks.size
+    val completedTasks = tasks.count { it.completed }
+
+    val completionFraction = if (totalTasks > 0) {
+        completedTasks.toFloat() / totalTasks
+    } else {
+        0f
+    }
+
+    val completionPercentage = (completionFraction * 100).toInt()
+
     val backgroundColor = MaterialTheme.colorScheme.background
     val cardColor = MaterialTheme.colorScheme.surface
     val textColor = MaterialTheme.colorScheme.onSurface
     val secondaryTextColor =
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-
+        textColor.copy(alpha = 0.65f)
     val primaryColor = MaterialTheme.colorScheme.primary
     val secondaryColor = MaterialTheme.colorScheme.secondary
 
     BackHandler {
-        // Prevents accidental exit from Home
+        // Prevent accidental exit from Home.
     }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = backgroundColor
     ) {
-
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
             LazyColumn(
                 modifier = Modifier
@@ -71,11 +111,9 @@ fun HomeScreen(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-
                 // Greeting
                 item {
                     Column {
-
                         Text(
                             text = "Good morning 👋",
                             fontSize = 26.sp,
@@ -83,9 +121,7 @@ fun HomeScreen(
                             color = textColor
                         )
 
-                        Spacer(
-                            modifier = Modifier.height(4.dp)
-                        )
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
                             text = "Let's get things done!",
@@ -95,129 +131,170 @@ fun HomeScreen(
                     }
                 }
 
-                // Today's Progress
+                // Dynamic task progress
                 item {
-
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = cardColor
                         ),
-                        elevation = CardDefaults.cardElevation(3.dp)
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 3.dp
+                        )
                     ) {
-
-                        Column(
-                            modifier = Modifier.padding(20.dp)
-                        ) {
-
+                        Column(modifier = Modifier.padding(20.dp)) {
                             Text(
-                                text = "Today's Progress",
+                                text = "Task Progress",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = textColor
                             )
 
-                            Spacer(
-                                modifier = Modifier.height(12.dp)
-                            )
+                            Spacer(modifier = Modifier.height(12.dp))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement =
+                                    Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-
                                 Text(
-                                    text = "3 of 5 tasks completed",
+                                    text = "$completedTasks of $totalTasks tasks completed",
                                     color = secondaryTextColor,
                                     fontSize = 14.sp
                                 )
 
                                 Text(
-                                    text = "60%",
+                                    text = "$completionPercentage%",
                                     color = primaryColor,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 18.sp
                                 )
                             }
 
-                            Spacer(
-                                modifier = Modifier.height(10.dp)
-                            )
+                            Spacer(modifier = Modifier.height(10.dp))
 
-                            // Progress bar background
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(10.dp)
                                     .background(
-                                        color = MaterialTheme.colorScheme.onSurface
-                                            .copy(alpha = 0.12f),
+                                        color = textColor.copy(alpha = 0.12f),
                                         shape = RoundedCornerShape(10.dp)
                                     )
                             ) {
-
-                                // Progress bar
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(0.6f)
-                                        .height(10.dp)
-                                        .background(
-                                            brush = Brush.horizontalGradient(
-                                                listOf(
-                                                    primaryColor,
-                                                    secondaryColor
-                                                )
-                                            ),
-                                            shape = RoundedCornerShape(10.dp)
-                                        )
-                                )
+                                if (completionFraction > 0f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(completionFraction)
+                                            .height(10.dp)
+                                            .background(
+                                                brush = Brush.horizontalGradient(
+                                                    listOf(
+                                                        primaryColor,
+                                                        secondaryColor
+                                                    )
+                                                ),
+                                                shape = RoundedCornerShape(10.dp)
+                                            )
+                                    )
+                                }
                             }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = if (totalTasks == 0) {
+                                    "Add a task to begin tracking your progress."
+                                } else if (completedTasks == totalTasks) {
+                                    "Great work! All your tasks are completed."
+                                } else {
+                                    "${totalTasks - completedTasks} tasks remaining."
+                                },
+                                fontSize = 13.sp,
+                                color = secondaryTextColor
+                            )
                         }
                     }
                 }
 
-                // Today's Schedule title
+                // Actual activities scheduled for today
                 item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Today's Schedule",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
 
-                    Text(
-                        text = "Today's Schedule",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = textColor
-                    )
+                        TextButton(onClick = onScheduleClick) {
+                            Text("View all")
+                        }
+                    }
                 }
 
-                // Schedule item 1
-                item {
+                if (todaysSchedules.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = cardColor
+                            ),
+                            elevation = CardDefaults.cardElevation(
+                                defaultElevation = 2.dp
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp)
+                            ) {
+                                Text(
+                                    text = "Nothing scheduled for today",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = textColor
+                                )
 
-                    SchedulePreviewCard(
-                        time = "09:00 AM",
-                        title = "Software Development",
-                        category = "College",
-                        cardColor = cardColor,
-                        textColor = textColor,
-                        secondaryTextColor = secondaryTextColor
-                    )
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                    text = "Add an activity with today's date to see it here.",
+                                    fontSize = 13.sp,
+                                    color = secondaryTextColor
+                                )
+
+                                TextButton(onClick = onScheduleClick) {
+                                    Text("Add an activity")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(
+                        items = todaysSchedules,
+                        key = { it.id }
+                    ) { schedule ->
+                        SchedulePreviewCard(
+                            time = "${schedule.startTime} - ${schedule.endTime}",
+                            title = schedule.title,
+                            category = schedule.category,
+                            cardColor = cardColor,
+                            textColor = textColor,
+                            secondaryTextColor = secondaryTextColor
+                        )
+                    }
                 }
 
-                // Schedule item 2
+                // Quick actions
                 item {
-
-                    SchedulePreviewCard(
-                        time = "02:00 PM",
-                        title = "Complete GrindFlow",
-                        category = "Project",
-                        cardColor = cardColor,
-                        textColor = textColor,
-                        secondaryTextColor = secondaryTextColor
-                    )
-                }
-
-                // Quick Actions title
-                item {
-
                     Text(
                         text = "Quick Actions",
                         fontSize = 20.sp,
@@ -226,14 +303,11 @@ fun HomeScreen(
                     )
                 }
 
-                // Quick Action buttons
                 item {
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-
                         QuickActionButton(
                             icon = "📅",
                             label = "Schedule",
@@ -260,7 +334,6 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-
                 NavigationItem(
                     icon = "⌂",
                     label = "Home",
@@ -300,7 +373,6 @@ fun HomeScreen(
     }
 }
 
-
 @Composable
 fun SchedulePreviewCard(
     time: String,
@@ -310,24 +382,22 @@ fun SchedulePreviewCard(
     textColor: Color,
     secondaryTextColor: Color
 ) {
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = cardColor
         ),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
     ) {
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-
-            // Schedule indicator
             Box(
                 modifier = Modifier
                     .size(8.dp)
@@ -337,14 +407,9 @@ fun SchedulePreviewCard(
                     )
             )
 
-            Spacer(
-                modifier = Modifier.width(12.dp)
-            )
+            Spacer(modifier = Modifier.width(12.dp))
 
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     fontSize = 16.sp,
@@ -352,9 +417,7 @@ fun SchedulePreviewCard(
                     color = textColor
                 )
 
-                Spacer(
-                    modifier = Modifier.height(4.dp)
-                )
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
                     text = category,
@@ -365,13 +428,12 @@ fun SchedulePreviewCard(
 
             Text(
                 text = time,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 color = secondaryTextColor
             )
         }
     }
 }
-
 
 @Composable
 fun QuickActionButton(
@@ -380,7 +442,6 @@ fun QuickActionButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-
     Button(
         onClick = onClick,
         modifier = modifier.height(90.dp),
@@ -389,28 +450,15 @@ fun QuickActionButton(
             containerColor = MaterialTheme.colorScheme.primary
         )
     ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = icon, fontSize = 24.sp)
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+            Spacer(modifier = Modifier.height(5.dp))
 
-            Text(
-                text = icon,
-                fontSize = 24.sp
-            )
-
-            Spacer(
-                modifier = Modifier.height(5.dp)
-            )
-
-            Text(
-                text = label,
-                fontSize = 13.sp
-            )
+            Text(text = label, fontSize = 13.sp)
         }
     }
 }
-
 
 @Composable
 fun NavigationItem(
@@ -419,15 +467,8 @@ fun NavigationItem(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-
-    TextButton(
-        onClick = onClick
-    ) {
-
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-
+    TextButton(onClick = onClick) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = icon,
                 fontSize = 22.sp,
