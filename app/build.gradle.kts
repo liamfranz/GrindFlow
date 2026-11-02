@@ -1,3 +1,4 @@
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -22,10 +23,17 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        manifestPlaceholders["usesCleartextTraffic"] = "false"
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
+
         release {
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
             isMinifyEnabled = false
 
             proguardFiles(
@@ -46,7 +54,6 @@ android {
 }
 
 dependencies {
-
     // Room Database
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
@@ -66,6 +73,9 @@ dependencies {
 
     // Firebase Authentication
     implementation(libs.firebase.auth)
+
+    // HTTP Client
+    implementation(libs.okhttp)
 
     // Testing
     testImplementation(libs.junit)

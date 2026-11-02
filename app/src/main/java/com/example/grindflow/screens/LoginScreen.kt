@@ -1,3 +1,4 @@
+
 package com.example.grindflow.screens
 
 import androidx.compose.foundation.background
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.grindflow.network.GrindFlowApi
 import com.google.firebase.auth.FirebaseAuth
 
 @Composable
@@ -271,18 +273,95 @@ fun LoginScreen(
                             val auth =
                                 FirebaseAuth.getInstance()
 
+                            // Step 1: Sign in with Firebase.
+
                             auth.signInWithEmailAndPassword(
                                 email.trim(),
                                 password
-                            ).addOnCompleteListener { task ->
+                            ).addOnCompleteListener { loginTask ->
 
-                                isLoading = false
+                                if (loginTask.isSuccessful) {
 
-                                if (task.isSuccessful) {
+                                    val firebaseUser =
+                                        auth.currentUser
 
-                                    onLogin()
+                                    if (firebaseUser == null) {
+
+                                        isLoading = false
+
+                                        errorMessage =
+                                            "Could not identify your Firebase account."
+
+                                    } else {
+
+                                        // Step 2: Retrieve the Firebase ID token.
+
+                                        firebaseUser.getIdToken(true)
+                                            .addOnCompleteListener { tokenTask ->
+
+                                                if (tokenTask.isSuccessful) {
+
+                                                    val idToken =
+                                                        tokenTask.result?.token
+
+                                                    if (idToken.isNullOrBlank()) {
+
+                                                        isLoading = false
+
+                                                        errorMessage =
+                                                            "Could not retrieve your authentication token."
+
+                                                    } else {
+
+                                                        // Step 3: Send the token to the GrindFlow API.
+
+                                                        GrindFlowApi.getCurrentUser(
+                                                            idToken
+                                                        ) { apiResult ->
+
+                                                            isLoading = false
+
+                                                            apiResult.onSuccess { apiUser ->
+
+                                                                // Step 4: Verify the API response.
+
+                                                                if (
+                                                                    apiUser.authenticated &&
+                                                                    apiUser.firebaseUserId == firebaseUser.uid
+                                                                ) {
+
+                                                                    // Step 5: Continue to the dashboard.
+
+                                                                    onLogin()
+
+                                                                } else {
+
+                                                                    errorMessage =
+                                                                        "Your account could not be verified by the server."
+                                                                }
+                                                            }
+
+                                                            apiResult.onFailure {
+
+                                                                errorMessage =
+                                                                    "Could not connect to the GrindFlow server. Please try again."
+                                                            }
+                                                        }
+                                                    }
+
+                                                } else {
+
+                                                    isLoading = false
+
+                                                    errorMessage =
+                                                        "Could not retrieve your authentication token."
+                                                }
+                                            }
+                                    }
 
                                 } else {
+
+                                    isLoading = false
 
                                     errorMessage =
                                         "Incorrect email or password."
@@ -307,7 +386,7 @@ fun LoginScreen(
 
                 Text(
                     text = if (isLoading) {
-                        "LOGGING IN..."
+                        "VERIFYING ACCOUNT..."
                     } else {
                         "LOGIN"
                     },
